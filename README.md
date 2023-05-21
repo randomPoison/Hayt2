@@ -9,6 +9,7 @@
 This should match the [Serenity setup instructions][serenity-setup], but
 basically:
 
+0. dammit https://rustup.rs/
 1. Make sure you have Discord running locally.
     * If you're living in WSL land like me, you probs want `apt install discord`
     and then you can run `discord` in a terminal to get some shit idk.
@@ -22,3 +23,10 @@ basically:
       we have `make` at home.
 
 [serenity-setup]: https://github.com/serenity-rs/serenity/blob/94ed67bfeb1821e3f212a9057c50c4e3b95916f2/examples/README.md
+
+## Contributing
+
+I guess you can if you like pain and under-proofed software, but maybe give me a
+little bit lay down some foundations before you come in with your Brilliant
+Refactor idea? idk PRs always Welcome :heart: but also: OSS is hard and I'm
+figuring it out as I go :coolsob:
