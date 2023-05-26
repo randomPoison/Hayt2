@@ -17,7 +17,7 @@ use crate::Bot;
 use serenity::{model::prelude::Message, prelude::Context};
 use std::collections::HashMap;
 use std::fmt::Write;
-use tracing::{error, info, debug};
+use tracing::{debug, error, info};
 
 /// A TODO list for a single user.
 ///
@@ -60,14 +60,18 @@ pub async fn handle_message(bot: &Bot, ctx: Context, msg: Message) {
         Some(("remove" | "delete", key)) => (TodoCommand::Remove, key),
 
         // If there's no body, print the TODO list.
-        None => (TodoCommand::Print, ""),
+        None if body.is_empty() => (TodoCommand::Print, ""),
+        None => (TodoCommand::Add, body),
 
         // If the user didn't specify a command (e.g. "!todo foo bar baz") then assume
         // they just want to add to their TODO list.
         _ => (TodoCommand::Add, body),
     };
 
-    debug!("Parsed !todo command {:?} to command {command:?} and key {key:?}", msg.content);
+    debug!(
+        "Parsed !todo command {:?} to command {command:?} and key {key:?}",
+        msg.content
+    );
 
     // Handle the selected command.
     match command {
@@ -119,8 +123,21 @@ pub async fn handle_message(bot: &Bot, ctx: Context, msg: Message) {
             let user_name = &msg.author.name;
             let mut response = format!("TODO list for {user_name}:\n");
 
-            // TODO: Sort by priority.
-            for (key, item) in todo_list {
+            // Get a list of the TODO list keys and sort it by item priority so that we
+            // can display the list in priority order.
+            let mut sorted_keys = todo_list
+                .iter()
+                .map(|(key, val)| (val.priority, key))
+                .collect::<Vec<_>>();
+            sorted_keys.sort_by_key(|(priority, _)| *priority);
+
+            // Build a string that displays the TODO list.
+            //
+            // NOTE: We iterate over the sorted keys in reverse order because
+            // `sort_by_key` sorts in ascending order and we want to print the list in
+            // descending order.
+            for &(_, key) in sorted_keys.iter().rev() {
+                let item = &todo_list[key];
                 let check_mark = if item.done { 'X' } else { ' ' };
                 writeln!(&mut response, "> [{check_mark}] {key}").unwrap();
             }
