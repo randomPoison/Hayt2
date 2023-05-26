@@ -15,9 +15,10 @@
 
 use crate::Bot;
 use serenity::{model::prelude::Message, prelude::Context};
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 use std::fmt::Write;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
+use anyhow::Result;
 
 /// A TODO list for a single user.
 ///
@@ -32,7 +33,7 @@ pub struct TodoItem {
     pub done: bool,
 }
 
-pub async fn handle_message(bot: &Bot, ctx: Context, msg: Message) {
+pub async fn handle_message(bot: &Bot, _ctx: &Context, msg: &Message) -> Result<impl Display> {
     #[derive(Debug, Clone, Copy)]
     enum TodoCommand {
         Add,
@@ -89,9 +90,7 @@ pub async fn handle_message(bot: &Bot, ctx: Context, msg: Message) {
                 _ => format!("Updated item {key:?}, priority is {}", item.priority),
             };
 
-            if let Err(e) = msg.channel_id.say(&ctx.http, response).await {
-                error!("Error sending message: {:?}", e);
-            }
+            Ok(response)
         }
 
         TodoCommand::Remove => {
@@ -99,10 +98,7 @@ pub async fn handle_message(bot: &Bot, ctx: Context, msg: Message) {
 
             info!("Removed TODO item {key:?} for user {user_id}");
 
-            let response = format!("Removed {key:?} from your list");
-            if let Err(e) = msg.channel_id.say(&ctx.http, response).await {
-                error!("Error sending message: {:?}", e);
-            }
+            Ok(format!("Removed {key:?} from your list"))
         }
 
         TodoCommand::Finish => {
@@ -111,10 +107,7 @@ pub async fn handle_message(bot: &Bot, ctx: Context, msg: Message) {
 
             info!("Finished TODO item {key:?} for user {user_id}");
 
-            let response = format!("Marked {key:?} as done");
-            if let Err(e) = msg.channel_id.say(&ctx.http, response).await {
-                error!("Error sending message: {:?}", e);
-            }
+            Ok(format!("Marked {key:?} as done"))
         }
 
         TodoCommand::Print => {
@@ -142,9 +135,7 @@ pub async fn handle_message(bot: &Bot, ctx: Context, msg: Message) {
                 writeln!(&mut response, "> [{check_mark}] {key}").unwrap();
             }
 
-            if let Err(e) = msg.channel_id.say(&ctx.http, response).await {
-                error!("Error sending message: {:?}", e);
-            }
+            Ok(response)
         }
     }
 }
