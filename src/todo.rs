@@ -13,12 +13,16 @@
 //! to the top of your list. Each time you add an item to your list it increases
 //! the priority by 1. By default the list is printed in priority order.
 
-use crate::Bot;
-use serenity::{model::prelude::Message, prelude::Context};
-use std::{collections::HashMap, fmt::Display};
+use anyhow::Result;
+use serenity::model::prelude::{Message, UserId};
+use std::collections::HashMap;
 use std::fmt::Write;
 use tracing::{debug, info};
-use anyhow::Result;
+
+#[derive(Debug, Default)]
+pub struct TodoState {
+    user_lists: HashMap<UserId, TodoList>,
+}
 
 /// A TODO list for a single user.
 ///
@@ -33,7 +37,7 @@ pub struct TodoItem {
     pub done: bool,
 }
 
-pub async fn handle_message(bot: &Bot, _ctx: &Context, msg: &Message) -> Result<impl Display> {
+pub fn handle_message(todo_state: &mut TodoState, msg: &Message) -> Result<String> {
     #[derive(Debug, Clone, Copy)]
     enum TodoCommand {
         Add,
@@ -42,12 +46,10 @@ pub async fn handle_message(bot: &Bot, _ctx: &Context, msg: &Message) -> Result<
         Print,
     }
 
+    // Get the user's TODO list, creating a new empty one if the user doesn't already
+    // have a TODO list.
     let user_id = msg.author.id;
-
-    // Lock the TODO list state and get the user's TODO list, creating a new empty
-    // one if the user doesn't already have a TODO list.
-    let mut todo_state = bot.todo_state.lock().await;
-    let todo_list = todo_state.entry(user_id).or_default();
+    let todo_list = todo_state.user_lists.entry(user_id).or_default();
 
     // Strip "!todo" off the front to get the body of the command.
     let body = msg.content.strip_prefix("!todo").unwrap().trim();
