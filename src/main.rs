@@ -1,12 +1,20 @@
 use anyhow::anyhow;
-use serenity::async_trait;
+use serenity::{async_trait, model::prelude::UserId};
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 use shuttle_secrets::SecretStore;
+use todo::handle_message;
+use std::collections::HashMap;
 use tracing::{error, info};
+use crate::todo::TodoList;
 
-struct Bot;
+mod todo;
+
+#[derive(Default)]
+pub struct Bot {
+    todo_state: Mutex<HashMap<UserId, TodoList>>,
+}
 
 #[async_trait]
 impl EventHandler for Bot {
@@ -15,6 +23,8 @@ impl EventHandler for Bot {
             if let Err(e) = msg.channel_id.say(&ctx.http, "world!").await {
                 error!("Error sending message: {:?}", e);
             }
+        } else if msg.content.starts_with("!todo") {
+            handle_message(self, ctx, msg).await;
         }
     }
 
@@ -38,7 +48,7 @@ async fn serenity(
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
     let client = Client::builder(&token, intents)
-        .event_handler(Bot)
+        .event_handler(Bot::default())
         .await
         .expect("Err creating client");
 
