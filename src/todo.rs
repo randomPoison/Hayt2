@@ -16,7 +16,8 @@
 use crate::Bot;
 use serenity::{model::prelude::Message, prelude::Context};
 use std::collections::HashMap;
-use tracing::{info, error};
+use std::fmt::Write;
+use tracing::{error, info, debug};
 
 /// A TODO list for a single user.
 ///
@@ -58,10 +59,15 @@ pub async fn handle_message(bot: &Bot, ctx: Context, msg: Message) {
         Some(("done" | "finish" | "finished" | "x" | "X", key)) => (TodoCommand::Finish, key),
         Some(("remove" | "delete", key)) => (TodoCommand::Remove, key),
 
+        // If there's no body, print the TODO list.
+        None => (TodoCommand::Print, ""),
+
         // If the user didn't specify a command (e.g. "!todo foo bar baz") then assume
         // they just want to add to their TODO list.
         _ => (TodoCommand::Add, body),
     };
+
+    debug!("Parsed !todo command {:?} to command {command:?} and key {key:?}", msg.content);
 
     // Handle the selected command.
     match command {
@@ -108,7 +114,20 @@ pub async fn handle_message(bot: &Bot, ctx: Context, msg: Message) {
         }
 
         TodoCommand::Print => {
-            // TODO: Print the list.
+            info!("Printing TODO list for user {user_id}");
+
+            let user_name = &msg.author.name;
+            let mut response = format!("TODO list for {user_name}:\n");
+
+            // TODO: Sort by priority.
+            for (key, item) in todo_list {
+                let check_mark = if item.done { 'X' } else { ' ' };
+                writeln!(&mut response, "> [{check_mark}] {key}").unwrap();
+            }
+
+            if let Err(e) = msg.channel_id.say(&ctx.http, response).await {
+                error!("Error sending message: {:?}", e);
+            }
         }
     }
 }
