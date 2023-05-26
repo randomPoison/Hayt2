@@ -16,7 +16,7 @@
 use crate::Bot;
 use serenity::{model::prelude::Message, prelude::Context};
 use std::collections::HashMap;
-use tracing::info;
+use tracing::{info, error};
 
 /// A TODO list for a single user.
 ///
@@ -31,7 +31,7 @@ pub struct TodoItem {
     pub done: bool,
 }
 
-pub async fn handle_message(bot: &Bot, _ctx: Context, msg: Message) {
+pub async fn handle_message(bot: &Bot, ctx: Context, msg: Message) {
     #[derive(Debug, Clone, Copy)]
     enum TodoCommand {
         Add,
@@ -69,26 +69,42 @@ pub async fn handle_message(bot: &Bot, _ctx: Context, msg: Message) {
             let item = todo_list.entry(key.into()).or_default();
             item.priority += 1;
 
-            // TODO: Respond indicating what the new priority is.
             info!(
                 "Updated TODO item {key:?} for user {user_id}, priority: {}",
                 item.priority,
             );
+
+            let response = match item.priority {
+                1 => format!("Added item {key:?} to your list"),
+                _ => format!("Updated item {key:?}, priority is {}", item.priority),
+            };
+
+            if let Err(e) = msg.channel_id.say(&ctx.http, response).await {
+                error!("Error sending message: {:?}", e);
+            }
         }
 
         TodoCommand::Remove => {
             let _old = todo_list.remove(key);
 
-            // TODO: Respond indicating that the item was removed.
             info!("Removed TODO item {key:?} for user {user_id}");
+
+            let response = format!("Removed {key:?} from your list");
+            if let Err(e) = msg.channel_id.say(&ctx.http, response).await {
+                error!("Error sending message: {:?}", e);
+            }
         }
 
         TodoCommand::Finish => {
             let item = todo_list.entry(key.into()).or_default();
             item.done = true;
 
-            // TODO: Respond indicating that item was completed.
             info!("Finished TODO item {key:?} for user {user_id}");
+
+            let response = format!("Marked {key:?} as done");
+            if let Err(e) = msg.channel_id.say(&ctx.http, response).await {
+                error!("Error sending message: {:?}", e);
+            }
         }
 
         TodoCommand::Print => {

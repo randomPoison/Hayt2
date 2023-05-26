@@ -4,7 +4,6 @@ use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 use shuttle_secrets::SecretStore;
-use todo::handle_message;
 use std::collections::HashMap;
 use tracing::{error, info};
 use crate::todo::TodoList;
@@ -24,7 +23,7 @@ impl EventHandler for Bot {
                 error!("Error sending message: {:?}", e);
             }
         } else if msg.content.starts_with("!todo") {
-            handle_message(self, ctx, msg).await;
+            todo::handle_message(self, ctx, msg).await;
         }
     }
 
