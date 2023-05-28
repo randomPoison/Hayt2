@@ -57,6 +57,7 @@ fn add_display_remove() {
     assert_eq!(format!("TODO list for {USER_NAME}:\n"), response);
 }
 
+// Verifies that items in the TODO list are displayed in priority order.
 #[test]
 fn priority_sort() {
     let mut state = TodoState::default();
@@ -84,6 +85,7 @@ fn priority_sort() {
     );
 }
 
+/// Verifies that items can be marked done.
 #[test]
 fn mark_items_done() {
     let mut state = TodoState::default();
