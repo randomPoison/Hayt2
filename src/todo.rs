@@ -52,25 +52,42 @@ pub struct TodoItem {
 /// Loads the user's TODO list state from the database and then process the
 /// user's message.
 pub async fn message(db: &Database, msg: &Message) -> Result<String> {
+    let user_id = msg.author.id;
+
     // Get the collection of user TODO lists and find the document for the user that
     // send the message.
     let collection = db.collection(COLLECTION_NAME);
-    let query = doc! { "user_id": msg.author.id.to_string() };
-    let doc = collection.find_one(query.clone(), None).await?;
+    let query = doc! { "user_id": user_id.to_string() };
 
-    // Get the user's existing TODO list, or create a new one if they haven't
-    // interacted with the `!todo` command yet.
-    let mut todo_state = doc.unwrap_or(TodoList::new(msg.author.id));
+    // Attempt to load the user's TODO list state from the database.
+    let doc = collection.find_one(query.clone(), None).await?;
+    debug!("Loaded TODO list for user {user_id}: {doc:#?}");
+
+    // If this is the first time the user is using the `!todo` command we need to
+    // insert a new document for the user.
+    let mut user_list = match doc {
+        Some(doc) => doc,
+
+        None => {
+            info!("First time usage of `!todo` for user {user_id}, inserting empty list");
+
+            let new = TodoList::new(user_id);
+            collection.insert_one(new.clone(), None).await?;
+            new
+        }
+    };
 
     // Handle the message, updating `todo_state` and getting the response message.
-    let response = handle_message(&mut todo_state, &msg)?;
+    let response = handle_message(&mut user_list, &msg)?;
 
     // Write the updated TODO state to the database.
     collection
         .update_one(
             query,
             doc! {
-                "$set": bson::to_document(&todo_state).unwrap(),
+                "$set": {
+                    "items": bson::to_bson(&user_list.items).unwrap(),
+                },
             },
             None,
         )
