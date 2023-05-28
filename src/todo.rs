@@ -14,30 +14,71 @@
 //! the priority by 1. By default the list is printed in priority order.
 
 use anyhow::Result;
+use mongodb::{bson::doc, Database};
+use serde::{Deserialize, Serialize};
 use serenity::model::prelude::{Message, UserId};
 use std::collections::HashMap;
 use std::fmt::Write;
 use tracing::{debug, info};
 
-#[derive(Debug, Default)]
-pub struct TodoState {
-    user_lists: HashMap<UserId, TodoList>,
-}
+static COLLECTION_NAME: &str = "user_todos";
 
 /// A TODO list for a single user.
-///
-/// The key is the item key, and the value is a [TodoItem] containing the saved
-/// TODO item state, i.e. the priority.
-pub type TodoList = HashMap<String, TodoItem>;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TodoList {
+    user_id: UserId,
+
+    /// The items in the user's list. The key is the item key, and the value is the
+    /// item state.
+    items: HashMap<String, TodoItem>,
+}
+
+impl TodoList {
+    fn new(user_id: UserId) -> Self {
+        TodoList {
+            user_id,
+            items: Default::default(),
+        }
+    }
+}
 
 /// A single TODO item in a user's TODO list.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct TodoItem {
     pub priority: u32,
     pub done: bool,
 }
 
-pub fn handle_message(todo_state: &mut TodoState, msg: &Message) -> Result<String> {
+/// Loads the user's TODO list state from the database and then process the
+/// user's message.
+pub async fn message(db: &Database, msg: &Message) -> Result<String> {
+    // Get the collection of user TODO lists and find the document for the user that
+    // send the message.
+    let collection = db.collection(COLLECTION_NAME);
+    let query = doc! { "user_id": msg.author.id.to_string() };
+    let doc = collection.find_one(query.clone(), None).await?;
+
+    // Get the user's existing TODO list, or create a new one if they haven't
+    // interacted with the `!todo` command yet.
+    let mut todo_state = doc.unwrap_or(TodoList::new(msg.author.id));
+
+    // Handle the message, updating `todo_state` and getting the response message.
+    let response = handle_message(&mut todo_state, &msg)?;
+
+    // Write the updated TODO state to the database.
+    collection
+        .update_one(query, bson::to_document(&todo_state).unwrap(), None)
+        .await?;
+
+    Ok(response)
+}
+
+/// Performs the core logic for handling a `!todo` command.
+/// 
+/// Updates the state of `todo_list` to reflect the new list state, and returns
+/// the message that should be sent back to the channel where the command was
+/// given.
+pub fn handle_message(todo_list: &mut TodoList, msg: &Message) -> Result<String> {
     #[derive(Debug, Clone, Copy)]
     enum TodoCommand {
         Add,
@@ -49,7 +90,6 @@ pub fn handle_message(todo_state: &mut TodoState, msg: &Message) -> Result<Strin
     // Get the user's TODO list, creating a new empty one if the user doesn't already
     // have a TODO list.
     let user_id = msg.author.id;
-    let todo_list = todo_state.user_lists.entry(user_id).or_default();
 
     // Strip "!todo" off the front to get the body of the command.
     let body = msg.content.strip_prefix("!todo").unwrap().trim();
@@ -79,7 +119,7 @@ pub fn handle_message(todo_state: &mut TodoState, msg: &Message) -> Result<Strin
     // Handle the selected command.
     match command {
         TodoCommand::Add => {
-            let item = todo_list.entry(key.into()).or_default();
+            let item = todo_list.items.entry(key.into()).or_default();
             item.priority += 1;
 
             info!(
@@ -96,7 +136,7 @@ pub fn handle_message(todo_state: &mut TodoState, msg: &Message) -> Result<Strin
         }
 
         TodoCommand::Remove => {
-            let _old = todo_list.remove(key);
+            let _old = todo_list.items.remove(key);
 
             info!("Removed TODO item {key:?} for user {user_id}");
 
@@ -104,7 +144,7 @@ pub fn handle_message(todo_state: &mut TodoState, msg: &Message) -> Result<Strin
         }
 
         TodoCommand::Finish => {
-            let item = todo_list.entry(key.into()).or_default();
+            let item = todo_list.items.entry(key.into()).or_default();
             item.done = true;
 
             info!("Finished TODO item {key:?} for user {user_id}");
@@ -121,6 +161,7 @@ pub fn handle_message(todo_state: &mut TodoState, msg: &Message) -> Result<Strin
             // Get a list of the TODO list keys and sort it by item priority so that we
             // can display the list in priority order.
             let mut sorted_keys = todo_list
+                .items
                 .iter()
                 .map(|(key, val)| (val.priority, key))
                 .collect::<Vec<_>>();
@@ -132,7 +173,7 @@ pub fn handle_message(todo_state: &mut TodoState, msg: &Message) -> Result<Strin
             // `sort_by_key` sorts in ascending order and we want to print the list in
             // descending order.
             for &(_, key) in sorted_keys.iter().rev() {
-                let item = &todo_list[key];
+                let item = &todo_list.items[key];
                 let check_mark = if item.done { 'X' } else { ' ' };
                 writeln!(&mut response, "> [{check_mark}] {key}").unwrap();
             }

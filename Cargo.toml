@@ -7,8 +7,12 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.66"
-shuttle-serenity = { version = "0.17.0" }
-shuttle-runtime = { version = "0.17.0" }
+bson = "2.6.1"
+futures = "0.3.28"
+mongodb = "2.5.0"
+tokio = { version = "1.26.0" }
+tracing = "0.1.37"
+serde = "1.0.163"
 serenity = { version = "0.11.5", default-features = false, features = [
     "client",
     "gateway",
@@ -16,9 +20,10 @@ serenity = { version = "0.11.5", default-features = false, features = [
     "rustls_backend",
     "utils",
 ] }
+shuttle-runtime = { version = "0.17.0" }
 shuttle-secrets = "0.17.0"
-tokio = { version = "1.26.0" }
-tracing = "0.1.37"
+shuttle-shared-db = { version = "0.17.0", features = ["mongodb"] }
+shuttle-serenity = { version = "0.17.0" }
 
 [dev-dependencies]
 pretty_assertions = "1.3.0"

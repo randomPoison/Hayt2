@@ -1,11 +1,13 @@
 use anyhow::anyhow;
 use eval_bot::Bot;
+use mongodb::Database;
 use serenity::prelude::*;
 use shuttle_secrets::SecretStore;
 
 #[shuttle_runtime::main]
 async fn serenity(
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
+    #[shuttle_shared_db::MongoDb] db: Database,
 ) -> shuttle_serenity::ShuttleSerenity {
     // Get the discord token set in `Secrets.toml`
     let token = if let Some(token) = secret_store.get("DISCORD_TOKEN") {
@@ -18,7 +20,7 @@ async fn serenity(
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
     let client = Client::builder(&token, intents)
-        .event_handler(Bot::default())
+        .event_handler(Bot::new(db))
         .await
         .expect("Err creating client");
 

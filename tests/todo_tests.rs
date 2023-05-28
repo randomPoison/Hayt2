@@ -1,12 +1,12 @@
 use anyhow::Result;
-use eval_bot::todo::{self, TodoState};
+use eval_bot::todo::{self, TodoList};
 use pretty_assertions::assert_eq;
 use serenity::{model::user::User, utils::CustomMessage};
 
 static USER_NAME: &str = "randomPoison";
 
 /// Builds a [Message] from the given `text`.
-fn send_message(state: &mut TodoState, text: &str) -> Result<String> {
+fn send_message(state: &mut TodoList, text: &str) -> Result<String> {
     let mut builder = CustomMessage::new();
     builder.content(text.to_string());
 
@@ -20,7 +20,7 @@ fn send_message(state: &mut TodoState, text: &str) -> Result<String> {
 }
 
 // Adds an item and verifies that the response is correct.
-fn add_item(state: &mut TodoState, key: &str, priority: u32) {
+fn add_item(state: &mut TodoList, key: &str, priority: u32) {
     let response = send_message(state, &format!("!todo {key}")).unwrap();
 
     let expected = match priority {
@@ -33,7 +33,7 @@ fn add_item(state: &mut TodoState, key: &str, priority: u32) {
 /// Tests that an item can be added from the list, displayed, and then removed.
 #[test]
 fn add_display_remove() {
-    let mut state = TodoState::default();
+    let mut state = TodoList::default();
 
     // Add an item with the key "foo" to the list.
     add_item(&mut state, "foo", 1);
@@ -60,7 +60,7 @@ fn add_display_remove() {
 // Verifies that items in the TODO list are displayed in priority order.
 #[test]
 fn priority_sort() {
-    let mut state = TodoState::default();
+    let mut state = TodoList::default();
 
     // Create 3 TODO items, each with different priority values.
     add_item(&mut state, "foo", 1);
@@ -88,7 +88,7 @@ fn priority_sort() {
 /// Verifies that items can be marked done.
 #[test]
 fn mark_items_done() {
-    let mut state = TodoState::default();
+    let mut state = TodoList::default();
 
     // Create 2 TODO items with different priority values so that they'll print
     // in a deterministic order.

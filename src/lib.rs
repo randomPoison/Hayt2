@@ -1,16 +1,20 @@
-use crate::todo::TodoState;
+use mongodb::Database;
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
-use tokio::sync::Mutex;
 use tracing::{error, info};
 
 pub mod todo;
 
-#[derive(Default)]
 pub struct Bot {
-    todo_state: Mutex<TodoState>,
+    db: Database,
+}
+
+impl Bot {
+    pub fn new(db: Database) -> Self {
+        Bot { db }
+    }
 }
 
 #[async_trait]
@@ -20,8 +24,7 @@ impl EventHandler for Bot {
         let response: anyhow::Result<Option<String>> = if msg.content == "!hello" {
             Ok(Some("world!".into()))
         } else if msg.content.starts_with("!todo") {
-            let mut todo_state = self.todo_state.lock().await;
-            todo::handle_message(&mut todo_state, &msg).map(|m| Some(m.to_string()))
+            todo::message(&self.db, &msg).await.map(Some)
         } else {
             Ok(None)
         };
