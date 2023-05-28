@@ -83,3 +83,29 @@ fn priority_sort() {
         response,
     );
 }
+
+#[test]
+fn mark_items_done() {
+    let mut state = TodoState::default();
+
+    // Create 2 TODO items with different priority values so that they'll print
+    // in a deterministic order.
+    add_item(&mut state, "foo", 1);
+    add_item(&mut state, "foo", 2);
+
+    add_item(&mut state, "foo bar", 1);
+
+    let response = send_message(&mut state, "!todo done foo").unwrap();
+    assert_eq!(r#"Marked "foo" as done"#, response);
+
+    // Verify that the items are displayed in the correct order.
+    let response = send_message(&mut state, "!todo").unwrap();
+    assert_eq!(
+        format!(
+            "TODO list for {USER_NAME}:\n\
+            > [X] foo\n\
+            > [ ] foo bar\n"
+        ),
+        response,
+    );
+}
