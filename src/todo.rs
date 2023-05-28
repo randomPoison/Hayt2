@@ -4,7 +4,7 @@
 //!
 //! * `!todo [show, print, display]` - Print your TODO list.
 //! * `!todo [add] <ITEM_KEY>` - Add an item to the list.
-//! * `!todo (remove, delete) <ITEM_KEY>` - Remove an item from the list.
+//! * `!todo (remove, rm, delete) <ITEM_KEY>` - Remove an item from the list.
 //! * `!todo (done, finish, finished, x, X) <ITEM_KEY>` - Mark an item done.
 //!
 //! # Item Prioritization
@@ -60,7 +60,7 @@ pub fn handle_message(todo_state: &mut TodoState, msg: &Message) -> Result<Strin
         Some(("" | "show" | "print" | "display", key)) => (TodoCommand::Print, key),
         Some(("add", key)) => (TodoCommand::Add, key),
         Some(("done" | "finish" | "finished" | "x" | "X", key)) => (TodoCommand::Finish, key),
-        Some(("remove" | "delete", key)) => (TodoCommand::Remove, key),
+        Some(("remove" | "rm" | "delete", key)) => (TodoCommand::Remove, key),
 
         // If there's no body, print the TODO list.
         None if body.is_empty() => (TodoCommand::Print, ""),
@@ -73,7 +73,7 @@ pub fn handle_message(todo_state: &mut TodoState, msg: &Message) -> Result<Strin
 
     debug!(
         "Parsed !todo command {:?} to command {command:?} and key {key:?}",
-        msg.content
+        msg.content,
     );
 
     // Handle the selected command.
