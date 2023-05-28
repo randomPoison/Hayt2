@@ -67,14 +67,20 @@ pub async fn message(db: &Database, msg: &Message) -> Result<String> {
 
     // Write the updated TODO state to the database.
     collection
-        .update_one(query, bson::to_document(&todo_state).unwrap(), None)
+        .update_one(
+            query,
+            doc! {
+                "$set": bson::to_document(&todo_state).unwrap(),
+            },
+            None,
+        )
         .await?;
 
     Ok(response)
 }
 
 /// Performs the core logic for handling a `!todo` command.
-/// 
+///
 /// Updates the state of `todo_list` to reflect the new list state, and returns
 /// the message that should be sent back to the channel where the command was
 /// given.

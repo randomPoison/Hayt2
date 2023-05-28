@@ -3,7 +3,7 @@ use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
-use tracing::{error, info};
+use tracing::{error, info, trace};
 
 pub mod todo;
 
@@ -20,6 +20,9 @@ impl Bot {
 #[async_trait]
 impl EventHandler for Bot {
     async fn message(&self, ctx: Context, msg: Message) {
+        let user_id = msg.author.id;
+        trace!("Received message from user {user_id}: {:?}", msg.content);
+
         // Handle the message based on the command it starts with.
         let response: anyhow::Result<Option<String>> = if msg.content == "!hello" {
             Ok(Some("world!".into()))
@@ -33,13 +36,19 @@ impl EventHandler for Bot {
         let response = match response {
             Ok(resp) => resp,
             Err(e) => {
-                error!("Error occurred: {e:?}");
+                error!(
+                    "Error occurred responding to message {:?} from user {user_id}: {e:?}",
+                    msg.content,
+                );
 
-                if let Err(e) = msg
-                    .channel_id
-                    .say(&ctx.http, format!("Error occurred: {e}"))
-                    .await
-                {
+                let message = format!(
+                    "Error occurred:\n\
+                    ```\n\
+                    {e}\n\
+                    ```",
+                );
+
+                if let Err(e) = msg.channel_id.say(&ctx.http, message).await {
                     error!("Error sending message: {:?}", e);
                 }
 
