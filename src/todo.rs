@@ -14,12 +14,18 @@
 //! the priority by 1. By default the list is printed in priority order.
 
 use anyhow::Result;
-use mongodb::{bson::doc, Database};
+use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};
-use serenity::model::prelude::{Message, UserId};
+use serenity::{
+    framework::standard::{macros::command, CommandResult},
+    model::prelude::{Message, UserId},
+    prelude::Context,
+};
 use std::collections::HashMap;
 use std::fmt::Write;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
+
+use crate::Bot;
 
 static COLLECTION_NAME: &str = "user_todos";
 
@@ -51,12 +57,19 @@ pub struct TodoItem {
 
 /// Loads the user's TODO list state from the database and then process the
 /// user's message.
-pub async fn message(db: &Database, msg: &Message) -> Result<String> {
+#[command]
+pub async fn todo(ctx: &Context, msg: &Message) -> CommandResult {
     let user_id = msg.author.id;
+
+    // Get the bot state from global storage.
+    let data = ctx.data.read().await;
+    let bot = data
+        .get::<Bot>()
+        .expect("Expected CommandCounter in TypeMap.");
 
     // Get the collection of user TODO lists and find the document for the user that
     // sent the message.
-    let collection = db.collection(COLLECTION_NAME);
+    let collection = bot.db.collection(COLLECTION_NAME);
     let query = doc! { "user_id": user_id.to_string() };
 
     // Attempt to load the user's TODO list state from the database.
@@ -93,7 +106,12 @@ pub async fn message(db: &Database, msg: &Message) -> Result<String> {
         )
         .await?;
 
-    Ok(response)
+    // Send the response to the channel where the command was sent.
+    if let Err(e) = msg.channel_id.say(&ctx.http, response).await {
+        error!("Error sending message: {:?}", e);
+    }
+
+    Ok(())
 }
 
 /// Performs the core logic for handling a `!todo` command.
