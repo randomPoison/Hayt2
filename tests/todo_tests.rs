@@ -1,7 +1,7 @@
 use anyhow::Result;
 use eval_bot::todo::{self, TodoList};
 use pretty_assertions::assert_eq;
-use serenity::{model::user::User, utils::CustomMessage};
+use poise::serenity_prelude::{model::user::User, utils::CustomMessage};
 
 static USER_NAME: &str = "randomPoison";
 

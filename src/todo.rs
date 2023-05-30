@@ -13,26 +13,20 @@
 //! to the top of your list. Each time you add an item to your list it increases
 //! the priority by 1. By default the list is printed in priority order.
 
+use crate::{serenity, Error, Handler};
 use anyhow::Result;
 use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};
-use serenity::{
-    framework::standard::{macros::command, CommandResult},
-    model::prelude::{Message, UserId},
-    prelude::Context,
-};
 use std::collections::HashMap;
 use std::fmt::Write;
 use tracing::{debug, error, info};
-
-use crate::Bot;
 
 static COLLECTION_NAME: &str = "user_todos";
 
 /// A TODO list for a single user.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TodoList {
-    user_id: UserId,
+    user_id: serenity::UserId,
 
     /// The items in the user's list. The key is the item key, and the value is the
     /// item state.
@@ -40,7 +34,7 @@ pub struct TodoList {
 }
 
 impl TodoList {
-    fn new(user_id: UserId) -> Self {
+    fn new(user_id: serenity::UserId) -> Self {
         TodoList {
             user_id,
             items: Default::default(),
@@ -55,16 +49,17 @@ pub struct TodoItem {
     pub done: bool,
 }
 
+/*
 /// Loads the user's TODO list state from the database and then process the
 /// user's message.
-#[command]
-pub async fn todo(ctx: &Context, msg: &Message) -> CommandResult {
+#[poise::command(slash_command, prefix_command)]
+pub async fn ping(ctx: poise::Context<'_, (), Error>) -> Result<(), Error> {
     let user_id = msg.author.id;
 
     // Get the bot state from global storage.
     let data = ctx.data.read().await;
     let bot = data
-        .get::<Bot>()
+        .get::<Handler>()
         .expect("Expected CommandCounter in TypeMap.");
 
     // Get the collection of user TODO lists and find the document for the user that
@@ -113,13 +108,14 @@ pub async fn todo(ctx: &Context, msg: &Message) -> CommandResult {
 
     Ok(())
 }
+*/
 
 /// Performs the core logic for handling a `!todo` command.
 ///
 /// Updates the state of `todo_list` to reflect the new list state, and returns
 /// the message that should be sent back to the channel where the command was
 /// given.
-pub fn handle_message(todo_list: &mut TodoList, msg: &Message) -> Result<String> {
+pub fn handle_message(todo_list: &mut TodoList, msg: &serenity::Message) -> Result<String> {
     #[derive(Debug, Clone, Copy)]
     enum TodoCommand {
         Add,
