@@ -55,7 +55,7 @@ pub async fn message(db: &Database, msg: &Message) -> Result<String> {
     let user_id = msg.author.id;
 
     // Get the collection of user TODO lists and find the document for the user that
-    // send the message.
+    // sent the message.
     let collection = db.collection(COLLECTION_NAME);
     let query = doc! { "user_id": user_id.to_string() };
 
