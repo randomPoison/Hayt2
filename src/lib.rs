@@ -5,8 +5,8 @@ use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 use tracing::{error, info, trace};
 
-pub mod todo;
 pub mod bug;
+pub mod todo;
 
 pub struct Bot {
     db: Database,
@@ -32,7 +32,9 @@ impl EventHandler for Bot {
         } else if msg.content.starts_with("!bug") {
             bug::message(&self.db, &msg).await.map(Some)
         } else if msg.content.starts_with("!help") {
-            Ok(Some("(chuckles) Oh, my... There's no.. help. for you, I'm afraid.".to_owned()))
+            Ok(Some(
+                "(chuckles) Oh, my... There's no.. help. for you, I'm afraid.".to_owned(),
+            ))
         } else {
             Ok(None)
         };

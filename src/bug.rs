@@ -8,8 +8,9 @@
 //! * `!bug (remove, rm, delete) <BUG_NUMBER>` - Remove a bug from the list.
 //! * `!bug +1 <BUG_NUMBER>` - Report that you've also encoutered this bug.
 
-use anyhow::Result;
+use anyhow::{Context, Ok, Result};
 use mongodb::{bson::doc, Database};
+use pest::Parser;
 use serde::{Deserialize, Serialize};
 use serenity::model::prelude::{Message, UserId};
 use std::{collections::HashMap, fmt};
@@ -17,7 +18,7 @@ use tracing::{debug, info};
 
 static COLLECTION_NAME: &str = "global_bugs";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum BugStatus {
     Open,
     Closed,
@@ -43,7 +44,7 @@ impl Default for BugStatus {
 pub struct BugList {
     /// The bugs in the global list. The key is the item key, and the value is the
     /// item state.
-    items: HashMap<String, BugItem>,
+    items: HashMap<u32, BugItem>,
 }
 
 impl BugList {
@@ -71,7 +72,7 @@ pub struct BugItem {
 
 /// Loads the user's bug list state from the database and then process the
 /// user's message.
-pub async fn message(db: &Database, msg: &Message) -> Result<String> {
+pub async fn message(db: &Database, msg: &Message) -> anyhow::Result<String> {
     let user_id = msg.author.id;
 
     // Get the collection of user bug lists and find the document for the user that
@@ -121,11 +122,13 @@ pub async fn message(db: &Database, msg: &Message) -> Result<String> {
 /// Updates the state of `bug_list` to reflect the new list state, and returns
 /// the message that should be sent back to the channel where the command was
 /// given.
-pub fn handle_message(bug_list: &mut BugList, msg: &Message) -> Result<String> {
+pub fn handle_message(bug_list: &mut BugList, msg: &Message) -> anyhow::Result<String> {
     #[derive(Debug, Clone, Copy)]
     enum BugCommand {
         Report,
-        Remove,
+        // TODO(id-generation) Don't activate this command until we have a reliable way to generate
+        // bug numbers other than just checking the current number of bugs.
+        // Remove,
         PlusOne,
         Print,
         PrintAll,
@@ -141,11 +144,12 @@ pub fn handle_message(bug_list: &mut BugList, msg: &Message) -> Result<String> {
 
     // Split off the first word of the body and see if it's a known command,
     // converting the rest of the body into the new bug item key.
-    let (command, key) = match body.split_once(char::is_whitespace) {
-        Some(("" | "show" | "print" | "display", key)) => (BugCommand::Print, key),
-        Some(("report" | "add", key)) => (BugCommand::Report, key),
-        Some(("remove" | "rm" | "delete", key)) => (BugCommand::Remove, key),
-        Some(("+1", key)) => (BugCommand::PlusOne, key),
+    let (command, rest) = match body.split_once(char::is_whitespace) {
+        Some(("" | "show" | "print" | "display", rest)) => (BugCommand::Print, rest),
+        Some(("report" | "add", rest)) => (BugCommand::Report, rest),
+        // TODO(id-generation)
+        // Some(("remove" | "rm" | "delete", rest)) => (BugCommand::Remove, rest),
+        Some(("+1", rest)) => (BugCommand::PlusOne, rest),
 
         // If there's no body, print the bug list.
         None if body.is_empty() => (BugCommand::PrintAll, body),
@@ -157,33 +161,68 @@ pub fn handle_message(bug_list: &mut BugList, msg: &Message) -> Result<String> {
     };
 
     debug!(
-        "Parsed !bug command {:?} to command {command:?} and key {key:?}",
+        "Parsed !bug command {:?} to command {command:?} and key {rest:?}",
         msg.content,
     );
 
     // Handle the selected command.
     match command {
+        // Add the new bug to the database if the information passed by the user is valid. Otherwise, respond with an error message.
         BugCommand::Report => {
-            todo!("Implement bug reporting");
-            // let mut response = String::new();
-            // Ok(response)
-        }
+            let mut parsed_report = BugReportParser::parse(Rule::bug_report, rest.trim())
+                .context("couldn't parse a user-submitted bug report")?;
 
-        BugCommand::Remove => {
-            match bug_list.items.remove(key) {
-                Some(item) => {
-                    info!("User {user_id} permanently deleted bug #{key:?} {}", item.name);
-                    Ok(format!("Removed bug #{key:?} from the list"))
-                }
-                None => Ok(format!("Bug #{key:?} not found in your list")),
-            }
-        }
+            let name = parsed_report
+                .next()
+                .expect("parser says this exists")
+                .as_str()
+                .trim_matches('"');
+            let summary = parsed_report
+                .next()
+                .expect("parser says this exists")
+                .as_str()
+                .trim_matches('"');
+            let detail = parsed_report
+                .next()
+                .expect("parser says this exists")
+                .as_str()
+                .trim_matches('"');
 
+            // TODO(id-generation) this approach is sound only so long as no bugs are ever removed from the list.
+            let new_bug_number = bug_list.items.len() as u32 + 1;
+            let new_bug = BugItem {
+                number: new_bug_number,
+                name: name.to_string(),
+                summary: summary.to_string(),
+                details: detail.to_string(),
+                reporter: user_id,
+                ..Default::default()
+            };
+
+            bug_list.items.insert(new_bug.number, new_bug);
+
+            Ok(format!(
+                "Added bug #{new_bug_number} \"{name}\" to the list",
+            ))
+        }
+        // TODO(id-generation) Don't activate this command until we have a reliable way to generate
+        // bug numbers other than just checking the current number of bugs.
+        // BugCommand::Remove => match bug_list.items.remove(rest) {
+        //     Some(item) => {
+        //         info!(
+        //             "User {user_id} permanently deleted bug #{rest} {}",
+        //             item.name
+        //         );
+        //         Ok(format!("Removed bug #{rest} from the list"))
+        //     }
+        //     None => Ok(format!("Bug #{rest} not found in your list")),
+        // },
         BugCommand::Print => {
-            if let Some(entry) = bug_list.items.get_mut(key) {
+            let bug_number = normalize_bug_number(rest)?;
+            if let Some(entry) = bug_list.items.get_mut(&bug_number) {
                 // TODO how does adding metadata to the `info` macro work?
                 // info!(key = key, user_id = user_id, "Printing bug info");
-                let mut response = format!("#{key} {}\n", entry.name);
+                let mut response = format!("#{rest} {}\n", entry.name);
                 response.push_str(&format!("{}:\n", entry.summary));
                 response.push_str(&format!("{}:\n", entry.details));
                 response.push_str(&format!("Priority: {}\n", entry.priority));
@@ -195,28 +234,76 @@ pub fn handle_message(bug_list: &mut BugList, msg: &Message) -> Result<String> {
                 Ok(response)
             } else {
                 Ok(format!(
-                    "I couldn't find a bug with the number {key} in the global list."
+                    "I couldn't find a bug with the number {rest} in the global list."
                 ))
             }
         }
         BugCommand::PlusOne => {
-            if let Some(entry) = bug_list.items.get_mut(key) {
+            let bug_number = normalize_bug_number(rest)?;
+            if let Some(entry) = bug_list.items.get_mut(&bug_number) {
                 entry.plus_ones.push(user_id);
-                Ok(format!("I'm sorry to hear that you're also experiencing this issue.\nAt least you've got {} other(s) for company.", entry.plus_ones.len()))
+                Ok(format!("I'm sorry to hear that you're also experiencing this issue.\nAt least you've got {} other(s) for company.", entry.plus_ones.len() - 1))
             } else {
                 Ok(format!(
-                    "I couldn't find a bug with the number {key} in the global list."
+                    "I couldn't find a bug with the number {rest} in the global list."
                 ))
             }
         }
         BugCommand::PrintAll => {
-            todo!("Create a table of all bugs and return it");
-            
-            // let mut response = String::new();
-            // Ok(response)
+            info!("Listing all unclosed bugs");
+            let mut response = String::new();
+
+            let unclosed_bugs = bug_list
+                .items
+                .values()
+                .filter(|&bug| bug.status != BugStatus::Closed);
+
+            for bug in unclosed_bugs {
+                let BugItem {
+                    name,
+                    summary,
+                    labels,
+                    plus_ones,
+                    number,
+                    ..
+                } = bug;
+                response.push_str(&format!(
+                    "#{number} {name}\t{summary}\t({} +1s)\t[{}]",
+                    plus_ones.len(),
+                    labels.join(", ")
+                ));
+            }
+
+            Ok(response)
         }
         BugCommand::Help => {
             todo!("surely I'm reinventing the wheel here")
         }
     }
+}
+
+#[derive(pest_derive::Parser)]
+#[grammar_inline = r#"
+bug_report = {
+    string_literal ~ WS ~
+    string_literal ~ WS ~
+    string_literal
+}
+// Either a triple-quoted string, quoted string, or a single "word"
+string_literal = @{ triple_quoted_string | double_quoted_string | (!WS ~ ANY)* }
+double_quoted_string = { DOUBLE_QUOTE ~ (!DOUBLE_QUOTE ~ ANY)* ~ DOUBLE_QUOTE }
+triple_quoted_string = { TRIPLE_QUOTE ~ (!TRIPLE_QUOTE ~ ANY)* ~ TRIPLE_QUOTE }
+WS = _{ " " }
+TRIPLE_QUOTE = { "\"\"\"" }
+DOUBLE_QUOTE = { "\"" }
+"#]
+struct BugReportParser;
+
+/// User-supplied bug numbers can be formatted in a variety of ways. This function
+/// normalizes the bug number to a consistent format, or returns an error if the
+/// bug number can't be normalized.
+fn normalize_bug_number(key: &str) -> Result<u32> {
+    key.trim().parse().context(format!(
+        "couldn't parse bug number from user input \"{key}\""
+    ))
 }
