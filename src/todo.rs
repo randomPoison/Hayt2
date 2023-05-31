@@ -13,7 +13,7 @@
 //! to the top of your list. Each time you add an item to your list it increases
 //! the priority by 1. By default the list is printed in priority order.
 
-use crate::{serenity, Error, Handler};
+use crate::{serenity, Error};
 use anyhow::Result;
 use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};

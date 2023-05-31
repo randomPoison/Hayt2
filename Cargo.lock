@@ -514,9 +514,9 @@ dependencies = [
  "poise",
  "pretty_assertions",
  "serde",
+ "shuttle-poise",
  "shuttle-runtime",
  "shuttle-secrets",
- "shuttle-serenity",
  "shuttle-shared-db",
  "tokio",
  "tracing",
@@ -2173,6 +2173,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-poise"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "873319f06f0a7ca19b70456a145e2e4e7228d6cb68d52f4cdbda7a0c1639a160"
+dependencies = [
+ "poise",
+ "shuttle-runtime",
+]
+
+[[package]]
 name = "shuttle-proto"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2224,16 +2234,6 @@ dependencies = [
  "async-trait",
  "serde",
  "shuttle-service",
-]
-
-[[package]]
-name = "shuttle-serenity"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dad5f47d39c18479874a53b2b9fc003beb1a6081650eaba523e4cd883a1a698"
-dependencies = [
- "serenity",
- "shuttle-runtime",
 ]
 
 [[package]]
