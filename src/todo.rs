@@ -25,7 +25,7 @@ use tracing::{debug, error, info};
 #[poise::command(
     prefix_command,
     slash_command,
-    subcommands("show", "add", "remove", "done"),
+    subcommands("show", "add", "remove", "done")
 )]
 pub async fn todo(ctx: Context<'_>, key: Option<String>) -> Result<(), Error> {
     match key {
@@ -199,6 +199,16 @@ fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User)
                 .collect::<Vec<_>>();
             sorted_keys.sort_by_key(|(priority, _)| *priority);
 
+            // Determine how wide the priority output needs to be displayed by finding the
+            // highest priority and calculating how many digits it will be.
+            let max_priority = todo_list
+                .items
+                .values()
+                .map(|item| item.priority)
+                .max()
+                .unwrap_or_default();
+            let priority_width = f32::log10((max_priority + 1) as f32).ceil() as usize;
+
             // Build a string that displays the TODO list.
             //
             // NOTE: We iterate over the sorted keys in reverse order because
@@ -209,7 +219,11 @@ fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User)
                 let item = &todo_list.items[key];
                 let check_mark = if item.done { 'X' } else { ' ' };
                 let priority = item.priority;
-                writeln!(&mut response, "({priority}) [{check_mark}] {key}").unwrap();
+                writeln!(
+                    &mut response,
+                    "({priority: >priority_width$}) [{check_mark}] {key}"
+                )
+                .unwrap();
             }
             response.push_str("```\n");
 
@@ -291,6 +305,13 @@ mod tests {
         add_item(&mut state, "foo", 1);
         add_item(&mut state, "foo", 2);
         add_item(&mut state, "foo", 3);
+        add_item(&mut state, "foo", 4);
+        add_item(&mut state, "foo", 5);
+        add_item(&mut state, "foo", 6);
+        add_item(&mut state, "foo", 7);
+        add_item(&mut state, "foo", 8);
+        add_item(&mut state, "foo", 9);
+        add_item(&mut state, "foo", 10);
 
         add_item(&mut state, "foo bar", 1);
         add_item(&mut state, "foo bar", 2);
@@ -303,9 +324,9 @@ mod tests {
             format!(
                 "TODO list for {USER_NAME}:\n\
                 ```\n\
-                (3) [ ] foo\n\
-                (2) [ ] foo bar\n\
-                (1) [ ] foo bar baz\n\
+                (10) [ ] foo\n\
+                ( 2) [ ] foo bar\n\
+                ( 1) [ ] foo bar baz\n\
                 ```\n"
             ),
             response,
