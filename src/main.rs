@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Error};
 use eval_bot::{age, ping, todo::todo, Data};
 use mongodb::Database;
-use poise::serenity_prelude as serenity;
+use poise::serenity_prelude::GatewayIntents;
 use shuttle_poise::ShuttlePoise;
 use shuttle_secrets::SecretStore;
 
@@ -30,7 +30,7 @@ async fn serenity(
             ..Default::default()
         })
         .token(token)
-        .intents(serenity::GatewayIntents::non_privileged())
+        .intents(GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT)
         .setup(move |ctx, _ready, framework| {
             Box::pin(async move {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;

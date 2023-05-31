@@ -25,7 +25,7 @@ use tracing::{debug, error, info};
 #[poise::command(
     prefix_command,
     slash_command,
-    subcommands("show", "add", "remove", "done")
+    subcommands("show", "add", "remove", "done"),
 )]
 pub async fn todo(ctx: Context<'_>, key: Option<String>) -> Result<(), Error> {
     match key {
@@ -83,7 +83,7 @@ async fn run_command(ctx: Context<'_>, command: TodoCommand) -> Result<()> {
     };
 
     // Handle the message, updating `todo_state` and getting the response message.
-    let response = handle_message(command, &mut user_list, ctx.author())?;
+    let response = handle_command(command, &mut user_list, ctx.author())?;
 
     // Write the updated TODO state to the database.
     collection
@@ -145,7 +145,7 @@ enum TodoCommand {
 /// Updates the state of `todo_list` to reflect the new list state, and returns
 /// the message that should be sent back to the channel where the command was
 /// given.
-fn handle_message(command: TodoCommand, todo_list: &mut TodoList, author: &User) -> Result<String> {
+fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User) -> Result<String> {
     let user_id = author.id;
 
     // Handle the selected command.
@@ -229,7 +229,7 @@ mod tests {
         let mut user = User::default();
         user.name = USER_NAME.into();
 
-        todo::handle_message(command, state, &user)
+        todo::handle_command(command, state, &user)
     }
 
     // Adds an item and verifies that the response is correct.
@@ -256,7 +256,7 @@ mod tests {
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
-            > [ ] foo\n"
+                > [ ] foo\n"
             ),
             response,
         );
@@ -290,9 +290,9 @@ mod tests {
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
-            > [ ] foo\n\
-            > [ ] foo bar\n\
-            > [ ] foo bar baz\n"
+                > [ ] foo\n\
+                > [ ] foo bar\n\
+                > [ ] foo bar baz\n"
             ),
             response,
         );
@@ -318,8 +318,8 @@ mod tests {
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
-            > [X] foo\n\
-            > [ ] foo bar\n"
+                > [X] foo\n\
+                > [ ] foo bar\n"
             ),
             response,
         );
