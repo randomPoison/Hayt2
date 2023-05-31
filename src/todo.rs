@@ -78,7 +78,7 @@ pub async fn message(db: &Database, msg: &Message) -> Result<String> {
     };
 
     // Handle the message, updating `todo_state` and getting the response message.
-    let response = handle_message(&mut user_list, &msg)?;
+    let response = handle_message(&mut user_list, msg)?;
 
     // Write the updated TODO state to the database.
     collection
