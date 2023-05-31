@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Error};
-use eval_bot::{age, ping, Data};
+use eval_bot::{age, ping, todo::todo, Data};
 use mongodb::Database;
 use poise::serenity_prelude as serenity;
 use shuttle_poise::ShuttlePoise;
@@ -19,7 +19,7 @@ async fn serenity(
 
     let framework = poise::Framework::<Data, _>::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![ping(), age()],
+            commands: vec![ping(), age(), todo()],
             prefix_options: poise::PrefixFrameworkOptions {
                 prefix: Some(".".into()),
                 additional_prefixes: vec![poise::Prefix::Literal("!")],
