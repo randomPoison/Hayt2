@@ -22,8 +22,6 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use tracing::{debug, error, info};
 
-static COLLECTION_NAME: &str = "user_todos";
-
 #[poise::command(
     prefix_command,
     slash_command,
@@ -63,7 +61,7 @@ async fn run_command(ctx: Context<'_>, command: TodoCommand) -> Result<()> {
 
     // Get the collection of user TODO lists and find the document for the user that
     // sent the message.
-    let collection = ctx.data().db.collection(COLLECTION_NAME);
+    let collection = ctx.data().db.collection("user_todos");
     let query = doc! { "user_id": user_id.to_string() };
 
     // Attempt to load the user's TODO list state from the database.
@@ -254,7 +252,7 @@ mod tests {
         add_item(&mut state, "foo", 1);
 
         // Verify that the item can be displayed in the TODO list.
-        let response = send_command(TodoCommand::Print, &mut state,).unwrap();
+        let response = send_command(TodoCommand::Print, &mut state).unwrap();
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
