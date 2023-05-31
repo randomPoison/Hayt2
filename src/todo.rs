@@ -204,11 +204,14 @@ fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User)
             // NOTE: We iterate over the sorted keys in reverse order because
             // `sort_by_key` sorts in ascending order and we want to print the list in
             // descending order.
+            response.push_str("```\n");
             for &(_, key) in sorted_keys.iter().rev() {
                 let item = &todo_list.items[key];
                 let check_mark = if item.done { 'X' } else { ' ' };
-                writeln!(&mut response, "> [{check_mark}] {key}").unwrap();
+                let priority = item.priority;
+                writeln!(&mut response, "({priority}) [{check_mark}] {key}").unwrap();
             }
+            response.push_str("```\n");
 
             Ok(response)
         }
@@ -256,7 +259,9 @@ mod tests {
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
-                > [ ] foo\n"
+                ```\n\
+                (1) [ ] foo\n\
+                ```\n"
             ),
             response,
         );
@@ -267,7 +272,14 @@ mod tests {
 
         // Verify that the list is now empty when printed.
         let response = send_command(TodoCommand::Print, &mut state).unwrap();
-        assert_eq!(format!("TODO list for {USER_NAME}:\n"), response);
+        assert_eq!(
+            format!(
+                "TODO list for {USER_NAME}:\n\
+                ```\n\
+                ```\n"
+            ),
+            response,
+        );
     }
 
     // Verifies that items in the TODO list are displayed in priority order.
@@ -290,9 +302,11 @@ mod tests {
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
-                > [ ] foo\n\
-                > [ ] foo bar\n\
-                > [ ] foo bar baz\n"
+                ```\n\
+                (3) [ ] foo\n\
+                (2) [ ] foo bar\n\
+                (1) [ ] foo bar baz\n\
+                ```\n"
             ),
             response,
         );
@@ -318,8 +332,10 @@ mod tests {
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
-                > [X] foo\n\
-                > [ ] foo bar\n"
+                ```\n\
+                (2) [X] foo\n\
+                (1) [ ] foo bar\n\
+                ```\n"
             ),
             response,
         );
