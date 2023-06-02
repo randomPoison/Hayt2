@@ -27,21 +27,25 @@ use tracing::{debug, error, info};
     slash_command,
     subcommands("show", "add", "remove", "done")
 )]
-pub async fn todo(ctx: Context<'_>, key: Option<String>) -> Result<(), Error> {
+pub async fn todo(
+    ctx: Context<'_>,
+    key: Option<String>,
+    category: Option<String>,
+) -> Result<(), Error> {
     match key {
-        Some(key) => run_command(ctx, TodoCommand::Add(key)).await,
-        None => run_command(ctx, TodoCommand::Print).await,
+        Some(key) => run_command(ctx, TodoCommand::Add { key, category }).await,
+        None => run_command(ctx, TodoCommand::Print { category }).await,
     }
 }
 
 #[poise::command(prefix_command, slash_command)]
-pub async fn show(ctx: Context<'_>) -> Result<(), Error> {
-    run_command(ctx, TodoCommand::Print).await
+pub async fn show(ctx: Context<'_>, category: Option<String>) -> Result<(), Error> {
+    run_command(ctx, TodoCommand::Print { category }).await
 }
 
 #[poise::command(prefix_command, slash_command)]
-pub async fn add(ctx: Context<'_>, key: String) -> Result<(), Error> {
-    run_command(ctx, TodoCommand::Add(key)).await
+pub async fn add(ctx: Context<'_>, key: String, category: Option<String>) -> Result<(), Error> {
+    run_command(ctx, TodoCommand::Add { key, category }).await
 }
 
 #[poise::command(prefix_command, slash_command)]
@@ -130,12 +134,20 @@ impl TodoList {
 pub struct TodoItem {
     pub priority: u32,
     pub done: bool,
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 enum TodoCommand {
-    Print,
-    Add(String),
+    Print {
+        category: Option<String>,
+    },
+
+    Add {
+        key: String,
+        category: Option<String>,
+    },
+
     Remove(String),
     Finish(String),
 }
@@ -150,18 +162,28 @@ fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User)
 
     // Handle the selected command.
     match command {
-        TodoCommand::Add(key) => {
+        TodoCommand::Add { key, category } => {
             let item = todo_list.items.entry(key.clone()).or_default();
             item.priority += 1;
 
+            // Update the item's category if one was specified.
+            if category.is_some() {
+                item.category = category;
+            }
+
+            let key_display = match &item.category {
+                Some(category) => format!("[{category}] {key:?}"),
+                None => format!("{key:?}"),
+            };
+
             info!(
-                "Updated TODO item {key:?} for user {user_id}, priority: {}",
+                "Updated TODO item {key_display} for user {user_id}, priority: {}",
                 item.priority,
             );
 
             let response = match item.priority {
-                1 => format!("Added item {key:?} to your list"),
-                _ => format!("Updated item {key:?}, priority is {}", item.priority),
+                1 => format!("Added item {key_display} to your list"),
+                _ => format!("Updated item {key_display}, priority is {}", item.priority),
             };
 
             Ok(response)
@@ -184,17 +206,21 @@ fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User)
             Ok(format!("Marked {key:?} as done"))
         }
 
-        TodoCommand::Print => {
+        TodoCommand::Print { category } => {
             info!("Printing TODO list for user {user_id}");
 
             let user_name = &author.name;
-            let mut response = format!("TODO list for {user_name}:\n");
+            let mut response = match &category {
+                Some(category) => format!("TODO list for {user_name} in category [{category}]:\n"),
+                None => format!("TODO list for {user_name}:\n"),
+            };
 
             // Get a list of the TODO list keys and sort it by item priority so that we
             // can display the list in priority order.
             let mut sorted_keys = todo_list
                 .items
                 .iter()
+                .filter(|(_, val)| category.is_none() || val.category == category)
                 .map(|(key, val)| (val.priority, key))
                 .collect::<Vec<_>>();
             sorted_keys.sort_by_key(|(priority, _)| *priority);
@@ -219,9 +245,16 @@ fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User)
                 let item = &todo_list.items[key];
                 let check_mark = if item.done { 'X' } else { ' ' };
                 let priority = item.priority;
+
+                let category_str = if category.is_some() || item.category.is_none() {
+                    "".into()
+                } else {
+                    format!(" [{}]", item.category.as_ref().unwrap())
+                };
+
                 writeln!(
                     &mut response,
-                    "({priority: >priority_width$}) [{check_mark}] {key}"
+                    "({priority: >priority_width$}) [{check_mark}]{category_str} {key}"
                 )
                 .unwrap();
             }
@@ -250,12 +283,46 @@ mod tests {
     }
 
     // Adds an item and verifies that the response is correct.
-    fn add_item(state: &mut TodoList, key: &str, priority: u32) {
-        let response = send_command(TodoCommand::Add(key.into()), state).unwrap();
+    fn add_item(state: &mut TodoList, key: impl Into<String>, priority: u32) {
+        let key = key.into();
+        let response = send_command(
+            TodoCommand::Add {
+                key: key.clone(),
+                category: None,
+            },
+            state,
+        )
+        .unwrap();
 
         let expected = match priority {
             1 => format!("Added item {key:?} to your list"),
             _ => format!("Updated item {key:?}, priority is {priority}"),
+        };
+        assert_eq!(expected, response);
+    }
+
+    // Adds an item and verifies that the response is correct.
+    fn add_with_category(
+        state: &mut TodoList,
+        key: impl Into<String>,
+        category: impl Into<String>,
+        priority: u32,
+    ) {
+        let key = key.into();
+        let category = category.into();
+
+        let response = send_command(
+            TodoCommand::Add {
+                key: key.clone(),
+                category: Some(category.clone()),
+            },
+            state,
+        )
+        .unwrap();
+
+        let expected = match priority {
+            1 => format!("Added item [{category}] {key:?} to your list"),
+            _ => format!("Updated item [{category}] {key:?}, priority is {priority}"),
         };
         assert_eq!(expected, response);
     }
@@ -269,7 +336,7 @@ mod tests {
         add_item(&mut state, "foo", 1);
 
         // Verify that the item can be displayed in the TODO list.
-        let response = send_command(TodoCommand::Print, &mut state).unwrap();
+        let response = send_command(TodoCommand::Print { category: None }, &mut state).unwrap();
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
@@ -285,7 +352,7 @@ mod tests {
         assert_eq!(r#"Removed "foo" from your list"#, response);
 
         // Verify that the list is now empty when printed.
-        let response = send_command(TodoCommand::Print, &mut state).unwrap();
+        let response = send_command(TodoCommand::Print { category: None }, &mut state).unwrap();
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
@@ -319,7 +386,7 @@ mod tests {
         add_item(&mut state, "foo bar baz", 1);
 
         // Verify that the items are displayed in the correct order.
-        let response = send_command(TodoCommand::Print, &mut state).unwrap();
+        let response = send_command(TodoCommand::Print { category: None }, &mut state).unwrap();
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
@@ -349,13 +416,51 @@ mod tests {
         assert_eq!(r#"Marked "foo" as done"#, response);
 
         // Verify that the items are displayed in the correct order.
-        let response = send_command(TodoCommand::Print, &mut state).unwrap();
+        let response = send_command(TodoCommand::Print { category: None }, &mut state).unwrap();
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
                 ```\n\
                 (2) [X] foo\n\
                 (1) [ ] foo bar\n\
+                ```\n"
+            ),
+            response,
+        );
+    }
+
+    /// Verifies that a category can be set for each item and that categories are
+    /// correctly handled when displaying the TODO list.
+    #[test]
+    fn categories() {
+        let mut state = TodoList::default();
+
+        // Create 2 TODO items with different priority values so that they'll print
+        // in a deterministic order.
+        add_with_category(&mut state, "foo", "Foo", 1);
+        add_with_category(&mut state, "foo", "Foo", 2);
+        add_item(&mut state, "foo bar", 1);
+
+        // Verify that all items are displayed if no category is specified.
+        let response = send_command(TodoCommand::Print { category: None }, &mut state).unwrap();
+        assert_eq!(
+            format!(
+                "TODO list for {USER_NAME}:\n\
+                ```\n\
+                (2) [ ] [Foo] foo\n\
+                (1) [ ] foo bar\n\
+                ```\n"
+            ),
+            response,
+        );
+
+        // Verify that a specific category can be displayed.
+        let response = send_command(TodoCommand::Print { category: Some("Foo".into()) }, &mut state).unwrap();
+        assert_eq!(
+            format!(
+                "TODO list for {USER_NAME} in category [Foo]:\n\
+                ```\n\
+                (2) [ ] foo\n\
                 ```\n"
             ),
             response,
