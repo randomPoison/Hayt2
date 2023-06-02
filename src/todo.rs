@@ -465,5 +465,20 @@ mod tests {
             ),
             response,
         );
+
+        // Verify that we can change the category of an existing item.
+        add_with_category(&mut state, "foo", "Bar", 3);
+        add_with_category(&mut state, "foo bar", "Foo", 2);
+        let response = send_command(TodoCommand::Print { category: None }, &mut state).unwrap();
+        assert_eq!(
+            format!(
+                "TODO list for {USER_NAME}:\n\
+                ```\n\
+                (3) [ ] [Bar] foo\n\
+                (2) [ ] [Foo] foo bar\n\
+                ```\n"
+            ),
+            response,
+        );
     }
 }
