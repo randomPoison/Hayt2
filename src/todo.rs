@@ -14,7 +14,7 @@
 //! the priority by 1. By default the list is printed in priority order.
 
 use crate::{serenity, Context, Error};
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use mongodb::bson::doc;
 use poise::serenity_prelude::{CacheHttp, User};
 use serde::{Deserialize, Serialize};
@@ -69,7 +69,10 @@ async fn run_command(ctx: Context<'_>, command: TodoCommand) -> Result<()> {
     let query = doc! { "user_id": user_id.to_string() };
 
     // Attempt to load the user's TODO list state from the database.
-    let doc = collection.find_one(query.clone(), None).await?;
+    let doc = collection
+        .find_one(query.clone(), None)
+        .await
+        .with_context(|| format!("Failed to get TODO list for user {user_id}"))?;
     debug!("Loaded TODO list for user {user_id}: {doc:#?}");
 
     // If this is the first time the user is using the `!todo` command we need to
@@ -87,7 +90,7 @@ async fn run_command(ctx: Context<'_>, command: TodoCommand) -> Result<()> {
     };
 
     // Handle the message, updating `todo_state` and getting the response message.
-    let response = handle_command(command, &mut user_list, ctx.author())?;
+    let response = handle_command(command, &mut user_list, ctx.author());
 
     // Write the updated TODO state to the database.
     collection
@@ -100,7 +103,8 @@ async fn run_command(ctx: Context<'_>, command: TodoCommand) -> Result<()> {
             },
             None,
         )
-        .await?;
+        .await
+        .with_context(|| format!("Failed to update TODO items for user {user_id}"))?;
 
     // Send the response to the channel where the command was sent.
     if let Err(e) = ctx.channel_id().say(ctx.http(), response).await {
@@ -157,7 +161,7 @@ enum TodoCommand {
 /// Updates the state of `todo_list` to reflect the new list state, and returns
 /// the message that should be sent back to the channel where the command was
 /// given.
-fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User) -> Result<String> {
+fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User) -> String {
     let user_id = author.id;
 
     // Handle the selected command.
@@ -186,7 +190,7 @@ fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User)
                 _ => format!("Updated item {key_display}, priority is {}", item.priority),
             };
 
-            Ok(response)
+            response
         }
 
         TodoCommand::Remove(key) => {
@@ -194,7 +198,7 @@ fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User)
 
             info!("Removed TODO item {key:?} for user {user_id}");
 
-            Ok(format!("Removed {key:?} from your list"))
+            format!("Removed {key:?} from your list")
         }
 
         TodoCommand::Finish(key) => {
@@ -203,7 +207,7 @@ fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User)
 
             info!("Finished TODO item {key:?} for user {user_id}");
 
-            Ok(format!("Marked {key:?} as done"))
+            format!("Marked {key:?} as done")
         }
 
         TodoCommand::Print { category } => {
@@ -260,7 +264,7 @@ fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User)
             }
             response.push_str("```\n");
 
-            Ok(response)
+            response
         }
     }
 }
@@ -268,14 +272,13 @@ fn handle_command(command: TodoCommand, todo_list: &mut TodoList, author: &User)
 #[cfg(test)]
 mod tests {
     use crate::todo::{self, TodoCommand, TodoList};
-    use anyhow::Result;
     use poise::serenity_prelude::model::user::User;
     use pretty_assertions::assert_eq;
 
     static USER_NAME: &str = "randomPoison";
 
     /// Builds a [Message] from the given `text`.
-    fn send_command(command: TodoCommand, state: &mut TodoList) -> Result<String> {
+    fn send_command(command: TodoCommand, state: &mut TodoList) -> String {
         let mut user = User::default();
         user.name = USER_NAME.into();
 
@@ -291,8 +294,7 @@ mod tests {
                 category: None,
             },
             state,
-        )
-        .unwrap();
+        );
 
         let expected = match priority {
             1 => format!("Added item {key:?} to your list"),
@@ -317,8 +319,7 @@ mod tests {
                 category: Some(category.clone()),
             },
             state,
-        )
-        .unwrap();
+        );
 
         let expected = match priority {
             1 => format!("Added item [{category}] {key:?} to your list"),
@@ -336,7 +337,7 @@ mod tests {
         add_item(&mut state, "foo", 1);
 
         // Verify that the item can be displayed in the TODO list.
-        let response = send_command(TodoCommand::Print { category: None }, &mut state).unwrap();
+        let response = send_command(TodoCommand::Print { category: None }, &mut state);
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
@@ -348,11 +349,11 @@ mod tests {
         );
 
         // Remove the item from the list.
-        let response = send_command(TodoCommand::Remove("foo".into()), &mut state).unwrap();
+        let response = send_command(TodoCommand::Remove("foo".into()), &mut state);
         assert_eq!(r#"Removed "foo" from your list"#, response);
 
         // Verify that the list is now empty when printed.
-        let response = send_command(TodoCommand::Print { category: None }, &mut state).unwrap();
+        let response = send_command(TodoCommand::Print { category: None }, &mut state);
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
@@ -386,7 +387,7 @@ mod tests {
         add_item(&mut state, "foo bar baz", 1);
 
         // Verify that the items are displayed in the correct order.
-        let response = send_command(TodoCommand::Print { category: None }, &mut state).unwrap();
+        let response = send_command(TodoCommand::Print { category: None }, &mut state);
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
@@ -412,11 +413,11 @@ mod tests {
 
         add_item(&mut state, "foo bar", 1);
 
-        let response = send_command(TodoCommand::Finish("foo".into()), &mut state).unwrap();
+        let response = send_command(TodoCommand::Finish("foo".into()), &mut state);
         assert_eq!(r#"Marked "foo" as done"#, response);
 
         // Verify that the items are displayed in the correct order.
-        let response = send_command(TodoCommand::Print { category: None }, &mut state).unwrap();
+        let response = send_command(TodoCommand::Print { category: None }, &mut state);
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
@@ -442,7 +443,7 @@ mod tests {
         add_item(&mut state, "foo bar", 1);
 
         // Verify that all items are displayed if no category is specified.
-        let response = send_command(TodoCommand::Print { category: None }, &mut state).unwrap();
+        let response = send_command(TodoCommand::Print { category: None }, &mut state);
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
@@ -455,7 +456,12 @@ mod tests {
         );
 
         // Verify that a specific category can be displayed.
-        let response = send_command(TodoCommand::Print { category: Some("Foo".into()) }, &mut state).unwrap();
+        let response = send_command(
+            TodoCommand::Print {
+                category: Some("Foo".into()),
+            },
+            &mut state,
+        );
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME} in category [Foo]:\n\
@@ -469,7 +475,7 @@ mod tests {
         // Verify that we can change the category of an existing item.
         add_with_category(&mut state, "foo", "Bar", 3);
         add_with_category(&mut state, "foo bar", "Foo", 2);
-        let response = send_command(TodoCommand::Print { category: None }, &mut state).unwrap();
+        let response = send_command(TodoCommand::Print { category: None }, &mut state);
         assert_eq!(
             format!(
                 "TODO list for {USER_NAME}:\n\
