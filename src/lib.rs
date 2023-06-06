@@ -2,6 +2,7 @@ use anyhow::Error;
 use mongodb::Database;
 use poise::serenity_prelude as serenity;
 
+pub mod bug;
 pub mod todo;
 
 type Context<'a> = poise::Context<'a, Data, Error>;
