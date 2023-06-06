@@ -16,7 +16,7 @@
 use crate::{serenity, Context, Error};
 use anyhow::{Context as _, Result};
 use mongodb::bson::doc;
-use poise::serenity_prelude::{CacheHttp, User};
+use poise::serenity_prelude::User;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -31,42 +31,56 @@ pub async fn todo(
     ctx: Context<'_>,
     key: Option<String>,
     category: Option<String>,
+    global: bool,
 ) -> Result<(), Error> {
     match key {
-        Some(key) => run_command(ctx, TodoCommand::Add { key, category }).await,
-        None => run_command(ctx, TodoCommand::Print { category }).await,
+        Some(key) => run_command(ctx, TodoCommand::Add { key, category }, global).await,
+        None => run_command(ctx, TodoCommand::Print { category }, global).await,
     }
 }
 
 #[poise::command(prefix_command, slash_command)]
-pub async fn show(ctx: Context<'_>, category: Option<String>) -> Result<(), Error> {
-    run_command(ctx, TodoCommand::Print { category }).await
+pub async fn show(ctx: Context<'_>, category: Option<String>, global: bool) -> Result<(), Error> {
+    run_command(ctx, TodoCommand::Print { category }, global).await
 }
 
 #[poise::command(prefix_command, slash_command)]
-pub async fn add(ctx: Context<'_>, key: String, category: Option<String>) -> Result<(), Error> {
-    run_command(ctx, TodoCommand::Add { key, category }).await
+pub async fn add(
+    ctx: Context<'_>,
+    key: String,
+    category: Option<String>,
+    global: bool,
+) -> Result<(), Error> {
+    run_command(ctx, TodoCommand::Add { key, category }, global).await
 }
 
 #[poise::command(prefix_command, slash_command)]
-pub async fn remove(ctx: Context<'_>, key: String) -> Result<(), Error> {
-    run_command(ctx, TodoCommand::Remove(key)).await
+pub async fn remove(ctx: Context<'_>, key: String, global: bool) -> Result<(), Error> {
+    run_command(ctx, TodoCommand::Remove(key), global).await
 }
 
 #[poise::command(prefix_command, slash_command)]
-pub async fn done(ctx: Context<'_>, key: String) -> Result<(), Error> {
-    run_command(ctx, TodoCommand::Finish(key)).await
+pub async fn done(ctx: Context<'_>, key: String, global: bool) -> Result<(), Error> {
+    run_command(ctx, TodoCommand::Finish(key), global).await
 }
 
 /// Loads the user's TODO list state from the database and then process the
 /// command.
-async fn run_command(ctx: Context<'_>, command: TodoCommand) -> Result<()> {
+async fn run_command(ctx: Context<'_>, command: TodoCommand, global: bool) -> Result<()> {
     let user_id = ctx.author().id;
 
-    // Get the collection of user TODO lists and find the document for the user that
-    // sent the message.
-    let collection = ctx.data().db.collection("user_todos");
-    let query = doc! { "user_id": user_id.to_string() };
+    // Get the correct collection based on whether or not this command is supposed
+    // to be personal or global. We also return the query here so that we can
+    // generically update the correct document based on the return of
+    // `handle_command`.
+    let (collection, query) = match global {
+        true => (ctx.data().db.collection("global_todos"), doc! {}),
+
+        false => (
+            ctx.data().db.collection("user_todos"),
+            doc! { "user_id": user_id.to_string() },
+        ),
+    };
 
     // Attempt to load the user's TODO list state from the database.
     let doc = collection
@@ -107,7 +121,7 @@ async fn run_command(ctx: Context<'_>, command: TodoCommand) -> Result<()> {
         .with_context(|| format!("Failed to update TODO items for user {user_id}"))?;
 
     // Send the response to the channel where the command was sent.
-    if let Err(e) = ctx.channel_id().say(ctx.http(), response).await {
+    if let Err(e) = ctx.send(|b| b.content(response)).await {
         error!("Error sending message: {:?}", e);
     }
 
